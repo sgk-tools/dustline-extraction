@@ -8,6 +8,7 @@ let player,enemies,crates,bullets,effects,elapsed=0,left=300,kills=0,score=0,spa
 let cam={yaw:-.10,pitch:0},keys=Object.create(null),touch={movement:null,look:null,fire:null,dx:0,dy:0},fireHeld=false,fireCooldown=0,shotFlash=0,hitFlash=0,view={w:390,h:750},lastMessage='';
 const T=DX3D.THREE, worldLimit=28,MAX_BOTS=8;
 let renderDirty=true;
+let lastHurt=-99,lastEnemyShot=-99;// v0.5 balance: shield regen and enemy fire spacing
 let cameraEye=null,cameraTarget=null,lastDt=.016,aiming=false,damageAnim=0,deathAge=0,contextLost=false,perfWindow=[],perfElapsed=0,adaptive=true,adaptAt=0;
 const corpses=[];
 const random=(a,b)=>a+Math.random()*(b-a);
@@ -30,6 +31,7 @@ function reset(){
  player={x:0,z:-21,hp:100,shield:60,ammo:30,reserve:150,reloading:0,med:2,yaw:0,move:0,shots:0,shotsHit:0,gait:0,sprinting:false,vx:0,vz:0};
  enemies=[];crates=lootLocations.map((p,i)=>({...p,id:i,got:false}));bullets=[];effects=[];
  for(const [x,z,t] of [[-9,-3,'scout'],[10,11,'scout'],[-4,14,'scout'],[-15,15,'heavy'],[3,21,'drone'],[6,-1,'scout']])enemies.push(spawnEnemy(x,z,t));
+ for(const e of enemies)e.attack=random(3,5.5);lastHurt=-99;lastEnemyShot=-99;
  corpses.length=0;cameraEye=null;cameraTarget=null;deathAge=0;damageAnim=0;clearInput();left=300;elapsed=0;kills=0;score=0;nextSpawn=14;fireCooldown=0;fireHeld=false;shotFlash=0;hitFlash=0;cam.yaw=0;cam.pitch=-.065;touch.dx=0;touch.dy=0;touch.movement=null;touch.look=null;keys=Object.create(null);
  $('damage').style.opacity='0';updateUI();
 }
@@ -51,7 +53,7 @@ function interact(){if(playing!=='play')return;
  messages('物資ケースに近づいて「回収」を押す');}
 function reload(){if(playing!=='play'||player.reloading>0||player.ammo===30||player.reserve===0)return;player.reloading=1.25;player.reloadPending=true;messages('リロード中…',.9);}
 function heal(){if(playing!=='play'||player.med<=0||player.hp>=100)return;player.med--;sound('med');player.hp=Math.min(100,player.hp+45);messages('メディキットを使用 +45 HP');updateUI();}
-function takeDamage(d){if(playing!=='play')return;const s=Math.min(player.shield,d);player.shield-=s;player.hp=Math.max(0,player.hp-(d-s));hitFlash=.7;damageAnim=.4;sound('damage');$('damage').style.opacity=String(clamp((d-s)*.03+.19,.15,.67));if(player.hp<=0)finish(false,'作戦員が戦闘不能');}
+function takeDamage(d){if(playing!=='play')return;lastHurt=elapsed;const s=Math.min(player.shield,d);player.shield-=s;player.hp=Math.max(0,player.hp-(d-s));hitFlash=.7;damageAnim=.4;sound('damage');$('damage').style.opacity=String(clamp((d-s)*.03+.19,.15,.67));if(player.hp<=0)finish(false,'作戦員が戦闘不能');}
 // Camera ray -> visible target, then muzzle ray -> obstruction. Same trajectory drives damage and tracer.
 function barrierHit(ray,maxDistance=90,padding=0){let nearest=null;
  for(const o of meshes.obstacles){const box=new T.Box3(new T.Vector3(o.x-o.w/2-padding,-.2,o.z-o.d/2-padding),new T.Vector3(o.x+o.w/2+padding,o.h??3,o.z+o.d/2+padding));const p=ray.intersectBox(box,new T.Vector3());if(p){const d=p.distanceTo(ray.origin);if(d<maxDistance&&(!nearest||d<nearest.distance))nearest={point:p,distance:d};}}
@@ -80,11 +82,14 @@ function shoot(){if(playing!=='play'||player.reloading>0||contextLost)return;if(
 function burst(x,y,z,n,size=1){for(let i=0;i<n;i++){if(effects.length>(quality===0?30:70))break;effects.push({x:x+random(-.18,.18),y:y+random(-.18,.18),z:z+random(-.18,.18),vx:random(-3,3)*size,vy:random(0,5)*size,vz:random(-3,3)*size,life:random(.22,.6),initial:.6,size:random(.03,.12)*size});}}
 function enemyShoot(e){const c=enemyCenter(e),from={x:c.x,y:c.y+.12,z:c.z},to={x:player.x,y:1.3,z:player.z};e.flash=.19;
  // Telegraph before a burst; strafing reduces incoming damage.
- bullets.push({from,to,life:.14,duration:.14,enemy:true});if(!segmentBlocked(from,to))takeDamage((e.type==='heavy'?13:e.type==='drone'?8:6)*(player.move>.5?.55:1));}
+ const range=Math.hypot(c.x-player.x,c.z-player.z),moving=player.move>.5;
+ const chance=clamp((e.type==='heavy'?.85:e.type==='drone'?.7:.8)-range*.014-(moving?.2:0)-(player.sprinting?.1:0),.2,.9);
+ if(Math.random()>chance){const a=Math.random()*Math.PI*2;to.x+=Math.cos(a)*random(.7,1.5);to.z+=Math.sin(a)*random(.7,1.5);to.y+=random(-.3,.9);bullets.push({from,to,life:.14,duration:.14,enemy:true});return;}
+ bullets.push({from,to,life:.14,duration:.14,enemy:true});if(!segmentBlocked(from,to))takeDamage((e.type==='heavy'?13:e.type==='drone'?8:6)*(moving?.55:1));}
 function segmentBlocked(a,b){const av=new T.Vector3(a.x,a.y??1.3,a.z),bv=new T.Vector3(b.x,b.y??1.3,b.z),d=av.distanceTo(bv);return !!barrierHit(new T.Ray(av,bv.sub(av).normalize()),d-.1);}
 function tryMove(x,z){if(!collide(x,player.z))player.x=x;if(!collide(player.x,z))player.z=z;}
 function update(dt){if(playing!=='play')return;
- lastDt=dt;damageAnim=Math.max(0,damageAnim-dt);elapsed+=dt;left-=dt;if(left<=0){left=0;finish(false,'制限時間を超過');return;}
+ lastDt=dt;damageAnim=Math.max(0,damageAnim-dt);elapsed+=dt;if(elapsed-lastHurt>4&&player.shield<60)player.shield=Math.min(60,player.shield+9*dt);left-=dt;if(left<=0){left=0;finish(false,'制限時間を超過');return;}
  fireCooldown-=dt;player.reloading=Math.max(0,player.reloading-dt);
  if(player.reloading===0&&player.ammo<30&&player.reserve>0&&player.reloadPending){const n=Math.min(30-player.ammo,player.reserve);player.ammo+=n;player.reserve-=n;player.reloadPending=false;}
  if(player.reloading>0)player.reloadPending=true;
@@ -94,12 +99,13 @@ function update(dt){if(playing!=='play')return;
  player.sprinting=(keys.shift||(!aiming&&touch.movement&&magnitude>.9))&&!fireHeld;
  f/=Math.max(1,magnitude);side/=Math.max(1,magnitude);
  const speed=aiming?3.1:player.sprinting?7.4:5.4,accel=1-Math.exp(-dt*12);
- const dx=(Math.sin(cam.yaw)*f+Math.cos(cam.yaw)*side)*speed,dz=(Math.cos(cam.yaw)*f-Math.sin(cam.yaw)*side)*speed;
+ // screen-right for a camera looking along (sin yaw, cos yaw) is (-cos yaw, sin yaw); v0.4 strafed mirrored
+ const dx=(Math.sin(cam.yaw)*f-Math.cos(cam.yaw)*side)*speed,dz=(Math.cos(cam.yaw)*f+Math.sin(cam.yaw)*side)*speed;
  player.vx=lerp(player.vx,dx,accel);player.vz=lerp(player.vz,dz,accel);
  const oldX=player.x,oldZ=player.z;tryMove(player.x+player.vx*dt,player.z+player.vz*dt);
  player.gait+=Math.hypot(player.x-oldX,player.z-oldZ)*(player.sprinting?4.8:6.5);
  player.yaw+=wrap(cam.yaw-player.yaw)*(1-Math.exp(-dt*16));
- if(keys.arrowleft)cam.yaw-=1.4*dt;if(keys.arrowright)cam.yaw+=1.4*dt;
+ if(keys.arrowleft)cam.yaw+=1.4*dt;if(keys.arrowright)cam.yaw-=1.4*dt;
  if(fireHeld&&fireCooldown<=0){shoot();fireCooldown=.128;}
  // AI: patrol toward player, keep a firing distance, use straightforward wall avoidance
  for(const e of enemies){if(e.dead)continue;e.phase+=dt;e.flash=Math.max(0,e.flash-dt);
@@ -112,7 +118,7 @@ function update(dt){if(playing!=='play')return;
   else if(!collide(e.x,e.z-sp,.75))e.z-=sp;
  }
  e.attack-=dt;
- if(e.attack<=0&&d<21){if(e.alert)enemyShoot(e);e.attack=(e.type==='heavy'?3.3:e.type==='drone'?2.9:3.2)*random(.8,1.4);}
+ if(e.attack<=0&&d<21){if(e.alert&&elapsed-lastEnemyShot<.45){e.attack=random(.3,.6);}else{if(e.alert){enemyShoot(e);lastEnemyShot=elapsed;}e.attack=(e.type==='heavy'?3.3:e.type==='drone'?2.9:3.2)*random(.8,1.4);}}
  }
  enemies=enemies.filter(e=>!e.dead);
  if(elapsed>nextSpawn&&enemies.length<MAX_BOTS){let attempts=0,x,z;do{x=random(-20,20);z=random(-14,28);attempts++;}while(attempts<20&&(collide(x,z,1.2)||dist({x,z},player)<12));
