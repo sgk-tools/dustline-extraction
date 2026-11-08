@@ -1,0 +1,42 @@
+/* v0.3 interface refinement; safe-area on all four edges. */
+:root{--white:#eaece0;--teal:#b2e3d4;--orange:#ebbd7a}
+#touchLayer{display:none}#touchLayer.touch{display:block}
+#crosshair,#hitflash{left:50%!important;top:50%}
+#top{padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right))}
+#bottom{padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right))}
+#performance{position:absolute;top:calc(43px + env(safe-area-inset-top));right:max(18px,env(safe-area-inset-right));font:9px ui-monospace,monospace;letter-spacing:.1em;color:#e7ecddaa;z-index:4;pointer-events:none}
+#waypoint{position:absolute;z-index:3;transform:translate(-50%,-120%);font:600 11px -apple-system,sans-serif;letter-spacing:.06em;color:#faf2ca;text-shadow:0 1px 4px #000;background:#182422b5;padding:6px 8px;border-bottom:1px solid #e6bd72;pointer-events:none;white-space:nowrap}
+.topBtn.active{background:#c4ddcb;color:#172c2c}
+#grain{background:linear-gradient(180deg,#06141c20,transparent 20%,transparent 78%,#06101870)}
+#vignette{background:radial-gradient(ellipse 90% 90% at 50% 45%,transparent 50%,#10191c6c)}
+.stat{border-radius:0;backdrop-filter:none;background:#172629b8;box-shadow:none}
+#modalWrap{background:linear-gradient(90deg,#0d1b20f2 0%,#162d3099 48%,#1d363f08 100%);backdrop-filter:none;justify-content:flex-start;padding-left:8vw}
+#modal{background:#14292dd9;border:1px solid #9da89570;border-radius:2px;padding:32px;width:min(100%,440px)}
+#modal h1{letter-spacing:-.035em;font-weight:900}
+#modal .eyebrow{font-size:9px;letter-spacing:.24em}
+.play{background:#ddc491;border-radius:1px}
+#app .btn{border-radius:3px;background:#182d32e0;box-shadow:none}#app .btn.action{background:#d4b47b;color:#172a2e}#app .btn.fire{border-radius:50%;background:#a56544e8}
+@media(pointer:coarse),(max-width:750px){
+ #modalWrap{justify-content:center;padding:18px;padding-top:calc(18px + env(safe-area-inset-top));padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+ #modal{padding:22px 19px}.brand{font-size:13px!important}.brand span{font-size:7px!important;letter-spacing:.11em!important}
+ #performance{top:calc(45px + env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));font-size:8px}
+ #app #bottom{display:block;height:calc(198px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#101c2355);pointer-events:none}
+ .ammoBox{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:calc(12px + env(safe-area-inset-bottom));min-width:100px!important;width:115px;pointer-events:none}
+ #app #buttons{position:absolute;right:max(16px,env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));display:grid;grid-template-columns:48px 48px 68px;grid-template-rows:48px 68px;gap:8px;pointer-events:none;align-items:center}
+ #buttons button{pointer-events:auto;min-width:44px!important}#app #med{grid-column:1;grid-row:2}#app #reload{grid-column:2;grid-row:2}#app #interact{grid-column:2/4;grid-row:1;width:100%;height:44px}#app #fire{grid-column:3;grid-row:2;width:68px;height:68px}
+ #app #mobileHint{font-size:9px;bottom:calc(82px + env(safe-area-inset-bottom));left:max(13px,env(safe-area-inset-left));max-width:115px;line-height:1.6}
+ #app #stick{bottom:calc(135px + env(safe-area-inset-bottom));width:96px;height:96px}#app #knob{left:25px;top:25px}
+ #app #moveZone{bottom:calc(80px + env(safe-area-inset-bottom));width:43%;height:58%}#app #aimZone{bottom:calc(90px + env(safe-area-inset-bottom));width:57%;height:65%}
+ #app #centerMsg{font-size:11px;white-space:normal;min-width:220px;top:64%}
+}
+@media(max-width:360px){#app #buttons{grid-template-columns:42px 42px 62px;gap:5px;right:10px}#app #fire{width:60px;height:60px}#app .ammoBox{width:92px;min-width:92px!important}.system{gap:3px!important}.topBtn{padding:7px 6px!important;font-size:9px!important}}
+@media(max-height:540px){
+ #app #status{top:calc(52px + env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));gap:4px}#status .stat{padding:4px 7px;min-width:108px}.stat .mini{font-size:9px}
+ #app #bottom{height:150px}#app #buttons{grid-template-columns:44px 44px 60px;grid-template-rows:42px 60px;gap:6px;bottom:calc(10px + env(safe-area-inset-bottom))}#app #fire{width:60px;height:60px}
+ #app #moveZone,#app #aimZone{bottom:50px;height:65%}#app #stick{bottom:80px;left:25px;width:86px;height:86px}#app #knob{left:20px;top:20px}#app #mobileHint{display:none}#app #performance{top:calc(41px + env(safe-area-inset-top))}
+ #app #modal{max-width:480px;padding:12px 18px}#modal p{font-size:11px;line-height:1.5}#modal h1{font-size:32px}#modalWrap{overflow:auto}
+}
+
+.settings{display:flex;gap:20px;font-size:11px;color:#c0cec5;padding-top:12px}.settings label{display:flex;align-items:center;gap:5px}.settings input{accent-color:#d3b87f;min-height:20px;min-width:20px}#performance{display:none}#app.show-fps #performance{display:block}
+#modalWrap{touch-action:pan-y;align-items:flex-start}#modal{flex-shrink:0;margin-top:auto;margin-bottom:auto}
+@media(max-height:540px){#app #stick{bottom:90px}}
