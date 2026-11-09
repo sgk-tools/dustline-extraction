@@ -1,4 +1,4 @@
-# DUSTLINE: EXTRACTION (v0.5-dev)
+# DUSTLINE: EXTRACTION (v0.5.1-dev)
 
 An original third-person extraction shooter that runs in the browser (Three.js r170, WebGL2).
 Play: https://sgk-tools.github.io/dustline-extraction/

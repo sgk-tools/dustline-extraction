@@ -9,6 +9,7 @@ let cam={yaw:-.10,pitch:0},keys=Object.create(null),touch={movement:null,look:nu
 const T=DX3D.THREE, worldLimit=28,MAX_BOTS=8;
 let renderDirty=true;
 let lastHurt=-99,lastEnemyShot=-99;// v0.5 balance: shield regen and enemy fire spacing
+const START_GRACE=5;// v0.5.1: no enemy fire during the first seconds of a mission
 let cameraEye=null,cameraTarget=null,lastDt=.016,aiming=false,damageAnim=0,deathAge=0,contextLost=false,perfWindow=[],perfElapsed=0,adaptive=true,adaptAt=0;
 const corpses=[];
 const random=(a,b)=>a+Math.random()*(b-a);
@@ -26,7 +27,7 @@ function sound(type){
 }
 function messages(t,seconds=2.2){lastMessage=t;toastTimer=seconds;$('centerMsg').textContent=t;$('centerMsg').style.opacity='1';}
 function collide(x,z,r=.46){if(Math.abs(x)>worldLimit-1||Math.abs(z)>worldLimit-1)return true;for(const b of meshes.obstacles){const dx=Math.max(Math.abs(x-b.x)-b.w*.5,0),dz=Math.max(Math.abs(z-b.z)-b.d*.5,0);if(dx*dx+dz*dz<r*r)return true;}return false;}
-function spawnEnemy(x,z,type){const heavy=type==='heavy',drone=type==='drone';return {id:++spawns,x,z,type,hp:heavy?150:drone?62:90,maxhp:heavy?150:drone?62:90,speed:heavy?1.35:drone?2.0:2.2,attack:random(.6,2.1),phase:random(0,7),yaw:angle({x,z},player),flash:0,dead:false};}
+function spawnEnemy(x,z,type){const heavy=type==='heavy',drone=type==='drone';return {id:++spawns,x,z,type,hp:heavy?150:drone?62:90,maxhp:heavy?150:drone?62:90,speed:heavy?1.35:drone?2.0:2.2,attack:random(.6,2.1),phase:random(0,7),yaw:angle({x,z},player),flash:0,dead:false,home:{x,z},hunting:false};}
 function reset(){
  player={x:0,z:-21,hp:100,shield:60,ammo:30,reserve:150,reloading:0,med:2,yaw:0,move:0,shots:0,shotsHit:0,gait:0,sprinting:false,vx:0,vz:0};
  enemies=[];crates=lootLocations.map((p,i)=>({...p,id:i,got:false}));bullets=[];effects=[];
@@ -72,7 +73,7 @@ function shoot(){if(playing!=='play'||player.reloading>0||contextLost)return;if(
  const desired=solution?.point||from.clone().add(new T.Vector3(Math.sin(cam.yaw),cam.pitch,Math.cos(cam.yaw)).multiplyScalar(80));
  const ray=new T.Ray(from,desired.clone().sub(from).normalize()),wall=barrierHit(ray),hit=enemyHit(ray,Math.min(desired.distanceTo(from)+1,wall?wall.distance:90));
  let to=hit?.point||wall?.point||desired;
- if(hit){const target=hit.enemy;sound('hit');target.hp-=target.type==='heavy'?20:27;target.flash=.18;player.shotsHit++;score+=15;hitFlash=.11;
+ if(hit){const target=hit.enemy;sound('hit');target.hp-=target.type==='heavy'?20:27;target.flash=.18;target.hunting=true;player.shotsHit++;score+=15;hitFlash=.11;
  $('hitflash').style.opacity='1';setTimeout(()=>$('hitflash').style.opacity='0',110);
  burst(to.x,to.y,to.z,quality===0?3:7,.34);
  if(target.hp<=0){target.dead=true;kills++;score+=target.type==='heavy'?180:target.type==='drone'?110:95;corpses.push({...target,age:0});messages('TARGET DOWN · '+kills,1.3);burst(target.x,to.y,target.z,quality===0?10:24,target.type==='heavy'?1.5:1);}
@@ -109,8 +110,14 @@ function update(dt){if(playing!=='play')return;
  if(fireHeld&&fireCooldown<=0){shoot();fireCooldown=.128;}
  // AI: patrol toward player, keep a firing distance, use straightforward wall avoidance
  for(const e of enemies){if(e.dead)continue;e.phase+=dt;e.flash=Math.max(0,e.flash-dt);
- const d=dist(e,player);e.yaw+=wrap(angle(e,player)-e.yaw)*(1-Math.exp(-dt*5));e.alert=d<26&&!segmentBlocked(e,player);
- if(d>(e.type==='heavy'?10:7)&&d<47){const sp=e.speed*dt;
+ const d=dist(e,player);e.alert=d<26&&!segmentBlocked(e,player);
+ // v0.5.1: chase only after seeing the player or being shot; otherwise patrol slowly around the spawn point
+ if(e.alert)e.hunting=true;
+ let goal=player,stop=e.type==='heavy'?10:7,pace=1;
+ if(!e.hunting){goal={x:e.home.x+Math.sin(e.phase*.35)*3,z:e.home.z+Math.cos(e.phase*.27)*3};stop=.5;pace=.35;}
+ e.yaw+=wrap(angle(e,goal)-e.yaw)*(1-Math.exp(-dt*5));
+ const gd=dist(e,goal);
+ if(gd>stop&&gd<47){const sp=e.speed*pace*dt;
   const nx=e.x+Math.sin(e.yaw)*sp,nz=e.z+Math.cos(e.yaw)*sp;
   if(!collide(nx,e.z,.75))e.x=nx;
   else if(!collide(e.x+sp,e.z,.75))e.x+=sp;
@@ -118,7 +125,7 @@ function update(dt){if(playing!=='play')return;
   else if(!collide(e.x,e.z-sp,.75))e.z-=sp;
  }
  e.attack-=dt;
- if(e.attack<=0&&d<21){if(e.alert&&elapsed-lastEnemyShot<.45){e.attack=random(.3,.6);}else{if(e.alert){enemyShoot(e);lastEnemyShot=elapsed;}e.attack=(e.type==='heavy'?3.3:e.type==='drone'?2.9:3.2)*random(.8,1.4);}}
+ if(e.attack<=0&&d<21&&elapsed>=START_GRACE){if(e.alert&&elapsed-lastEnemyShot<.45){e.attack=random(.3,.6);}else{if(e.alert){enemyShoot(e);lastEnemyShot=elapsed;}e.attack=(e.type==='heavy'?3.3:e.type==='drone'?2.9:3.2)*random(.8,1.4);}}
  }
  enemies=enemies.filter(e=>!e.dead);
  if(elapsed>nextSpawn&&enemies.length<MAX_BOTS){let attempts=0,x,z;do{x=random(-20,20);z=random(-14,28);attempts++;}while(attempts<20&&(collide(x,z,1.2)||dist({x,z},player)<12));
